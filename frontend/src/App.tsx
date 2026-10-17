@@ -1,17 +1,76 @@
+import { Route, Routes } from 'react-router-dom'
+import AppShell from './app/AppShell'
+import PlaceholderPage from './components/PlaceholderPage'
+
+function NotFound() {
+  return (
+    <section>
+      <h1 className="text-2xl font-semibold">Page not found</h1>
+      <p className="mt-2 max-w-2xl">This address does not match any section of VerifiGST.</p>
+    </section>
+  )
+}
+
 export default function App() {
   return (
-    <main className="p-12">
-      <h1 className="text-3xl font-semibold">VerifiGST</h1>
-      <p className="mt-2">Tailwind and design tokens check.</p>
-      <div className="mt-6 max-w-md border border-line bg-surface p-6">
-        <p className="font-medium">White working surface on an ivory canvas</p>
-        <p className="mt-2 text-forest">Forest green: positive state</p>
-        <p className="text-gold">Antique gold: attention</p>
-        <p className="text-terracotta">Terracotta: failure</p>
-        <button className="mt-4 rounded-md bg-forest px-4 py-2 text-white">
-          Primary action
-        </button>
-      </div>
-    </main>
+    <Routes>
+      <Route element={<AppShell />}>
+        <Route
+          index
+          element={
+            <PlaceholderPage
+              title="Overview"
+              description="Operational summary of invoices, verification results and investigations."
+            />
+          }
+        />
+        <Route
+          path="verify"
+          element={
+            <PlaceholderPage
+              title="Verify Invoice"
+              description="Upload an invoice and review signature, field and issuer checks."
+            />
+          }
+        />
+        <Route
+          path="network"
+          element={
+            <PlaceholderPage
+              title="Network Explorer"
+              description="Interactive graph of companies and transactions."
+            />
+          }
+        />
+        <Route
+          path="investigations"
+          element={
+            <PlaceholderPage
+              title="Investigations"
+              description="Cases, related records, evidence completeness and review status."
+            />
+          }
+        />
+        <Route
+          path="evidence"
+          element={
+            <PlaceholderPage
+              title="Evidence and Reports"
+              description="Traceable evidence records and exportable case reports."
+            />
+          }
+        />
+        <Route
+          path="settings"
+          element={
+            <PlaceholderPage
+              title="Settings"
+              description="Integration status and safe configuration guidance."
+            />
+          }
+        />
+        <Route path="*" element={<NotFound />} />
+      </Route>
+    </Routes>
   )
 }
