@@ -1,0 +1,23 @@
+:root {
+  --canvas: #F7F5EF;
+  --surface: #FFFFFF;
+  --stone: #EFEEE8;
+  --border: #E3E0D7;
+  --green: #356859;
+  --gold: #B58A45;
+  --terracotta: #A84F43;
+  --text: #393B35;
+}
+
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--canvas);
+  color: var(--text);
+  font-family: Inter, "Segoe UI", system-ui, sans-serif;
+  font-size: 17px;
+  line-height: 1.6;
+}
+
+.page { padding: 48px; }
