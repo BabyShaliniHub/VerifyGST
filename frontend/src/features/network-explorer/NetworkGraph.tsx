@@ -136,6 +136,12 @@ export default function NetworkGraph({
     cyRef.current = cy
     onReady(cy)
 
+    const observer = new ResizeObserver(() => {
+      cy.resize()
+      cy.fit(undefined, 60)
+    })
+    observer.observe(containerRef.current)
+
     cy.on('tap', 'node', (evt) => {
       onSelectRef.current({ kind: 'node', id: evt.target.id() })
     })
@@ -147,6 +153,7 @@ export default function NetworkGraph({
     })
 
     return () => {
+      observer.disconnect()
       onReady(null)
       cy.destroy()
       cyRef.current = null
