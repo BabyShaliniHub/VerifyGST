@@ -1,6 +1,7 @@
 import { Route, Routes } from 'react-router-dom'
 import AppShell from './app/AppShell'
 import PlaceholderPage from './components/PlaceholderPage'
+import NetworkExplorerPage from './features/network-explorer/NetworkExplorerPage'
 import OverviewPage from './features/overview/OverviewPage'
 
 const placeholders = [
@@ -8,11 +9,6 @@ const placeholders = [
     path: 'verify',
     title: 'Verify Invoice',
     description: 'Upload an invoice and review signature, field and issuer checks.',
-  },
-  {
-    path: 'network',
-    title: 'Network Explorer',
-    description: 'Interactive graph of companies and transactions.',
   },
   {
     path: 'investigations',
@@ -45,6 +41,7 @@ export default function App() {
     <Routes>
       <Route element={<AppShell />}>
         <Route index element={<OverviewPage />} />
+        <Route path="network" element={<NetworkExplorerPage />} />
         {placeholders.map((p) => (
           <Route
             key={p.path}
