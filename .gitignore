@@ -1,0 +1,38 @@
+# Secrets and environment
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# Uploads, logs and local data
+uploads/
+storage/
+*.log
+logs/
+*.sqlite
+*.db
+
+# Docker volumes
+pgdata/
+neo4j-data/
+
+# OS and editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
