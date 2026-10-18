@@ -1,6 +1,7 @@
 import { Route, Routes } from 'react-router-dom'
 import AppShell from './app/AppShell'
 import PlaceholderPage from './components/PlaceholderPage'
+import EvidencePage from './features/evidence/EvidencePage'
 import InvestigationsPage from './features/investigations/InvestigationsPage'
 import NetworkExplorerPage from './features/network-explorer/NetworkExplorerPage'
 import OverviewPage from './features/overview/OverviewPage'
@@ -10,11 +11,6 @@ const placeholders = [
     path: 'verify',
     title: 'Verify Invoice',
     description: 'Upload an invoice and review signature, field and issuer checks.',
-  },
-  {
-    path: 'evidence',
-    title: 'Evidence and Reports',
-    description: 'Traceable evidence records and exportable case reports.',
   },
   {
     path: 'settings',
@@ -39,6 +35,7 @@ export default function App() {
         <Route index element={<OverviewPage />} />
         <Route path="network" element={<NetworkExplorerPage />} />
         <Route path="investigations" element={<InvestigationsPage />} />
+        <Route path="evidence" element={<EvidencePage />} />
         {placeholders.map((p) => (
           <Route
             key={p.path}
