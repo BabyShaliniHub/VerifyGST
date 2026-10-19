@@ -3,15 +3,11 @@ import AppShell from './app/AppShell'
 import PlaceholderPage from './components/PlaceholderPage'
 import EvidencePage from './features/evidence/EvidencePage'
 import InvestigationsPage from './features/investigations/InvestigationsPage'
+import VerifyInvoicePage from './features/invoice-verification/VerifyInvoicePage'
 import NetworkExplorerPage from './features/network-explorer/NetworkExplorerPage'
 import OverviewPage from './features/overview/OverviewPage'
 
 const placeholders = [
-  {
-    path: 'verify',
-    title: 'Verify Invoice',
-    description: 'Upload an invoice and review signature, field and issuer checks.',
-  },
   {
     path: 'settings',
     title: 'Settings',
@@ -33,6 +29,7 @@ export default function App() {
     <Routes>
       <Route element={<AppShell />}>
         <Route index element={<OverviewPage />} />
+        <Route path="verify" element={<VerifyInvoicePage />} />
         <Route path="network" element={<NetworkExplorerPage />} />
         <Route path="investigations" element={<InvestigationsPage />} />
         <Route path="evidence" element={<EvidencePage />} />
