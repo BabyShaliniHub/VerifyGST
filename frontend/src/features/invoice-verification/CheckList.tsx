@@ -1,5 +1,5 @@
 import { Check, CircleHelp, Flag, Minus, X, type LucideIcon } from 'lucide-react'
-import type { CheckResult, CheckStatus } from './demoInvoices'
+import type { CheckResult, CheckStatus } from './checkTypes'
 
 export const statusMeta: Record<CheckStatus, { label: string; icon: LucideIcon; tone: string }> = {
   passed: { label: 'Passed', icon: Check, tone: 'text-forest' },

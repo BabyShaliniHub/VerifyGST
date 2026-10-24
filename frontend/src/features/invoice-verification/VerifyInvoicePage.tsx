@@ -1,18 +1,10 @@
 import { useEffect, useRef, useState, type DragEvent } from 'react'
 import { Upload } from 'lucide-react'
+import { fetchSamples, verifySample, type ApiReport, type ApiSample } from '../../lib/api'
 import CheckList, { StatusLabel, statusMeta } from './CheckList'
-import InvoicePreview from './InvoicePreview'
+import { uploadChecks, type CheckResult, type CheckStatus } from './checkTypes'
 import { detectFileType } from './fileSignature'
-import {
-  FIELD_KEYS,
-  fieldLabels,
-  samples,
-  uploadChecks,
-  type CheckResult,
-  type CheckStatus,
-  type FieldKey,
-  type SampleInvoice,
-} from './demoInvoices'
+import InvoicePreview from './InvoicePreview'
 
 const MAX_BYTES = 10 * 1024 * 1024
 const ALLOWED_TYPES = ['application/pdf', 'image/png', 'image/jpeg']
@@ -21,6 +13,12 @@ const statusOrder: CheckStatus[] = ['passed', 'failed', 'unknown', 'manual_revie
 const fieldClass = 'rounded-md border border-line bg-surface px-3 py-2'
 
 type UploadedFile = { name: string; size: number; type: string; url: string }
+type SamplesState = 'loading' | 'ready' | 'error'
+type ResultState =
+  | { state: 'idle' }
+  | { state: 'loading' }
+  | { state: 'error' }
+  | { state: 'ready'; report: ApiReport }
 
 function summarize(checks: CheckResult[]): string {
   return statusOrder
@@ -32,12 +30,6 @@ function summarize(checks: CheckResult[]): string {
     .join(', ')
 }
 
-function fieldStatus(sample: SampleInvoice, key: FieldKey): CheckStatus {
-  if (!sample.signed) return 'not_checked'
-  if (sample.lowConfidence.includes(key)) return 'manual_review'
-  return sample.visible[key] === sample.signed[key] ? 'passed' : 'failed'
-}
-
 function formatSize(bytes: number): string {
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
@@ -45,10 +37,44 @@ function formatSize(bytes: number): string {
 
 export default function VerifyInvoicePage() {
   const inputRef = useRef<HTMLInputElement>(null)
+  const [samples, setSamples] = useState<ApiSample[]>([])
+  const [samplesState, setSamplesState] = useState<SamplesState>('loading')
+  const [samplesAttempt, setSamplesAttempt] = useState(0)
   const [sampleId, setSampleId] = useState('')
+  const [result, setResult] = useState<ResultState>({ state: 'idle' })
+  const [resultAttempt, setResultAttempt] = useState(0)
   const [upload, setUpload] = useState<UploadedFile | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [dragActive, setDragActive] = useState(false)
+
+  useEffect(() => {
+    const controller = new AbortController()
+    setSamplesState('loading')
+    fetchSamples(controller.signal)
+      .then((list) => {
+        setSamples(list)
+        setSamplesState('ready')
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setSamplesState('error')
+      })
+    return () => controller.abort()
+  }, [samplesAttempt])
+
+  useEffect(() => {
+    if (!sampleId) {
+      setResult({ state: 'idle' })
+      return
+    }
+    const controller = new AbortController()
+    setResult({ state: 'loading' })
+    verifySample(sampleId, controller.signal)
+      .then((report) => setResult({ state: 'ready', report }))
+      .catch(() => {
+        if (!controller.signal.aborted) setResult({ state: 'error' })
+      })
+    return () => controller.abort()
+  }, [sampleId, resultAttempt])
 
   useEffect(() => {
     return () => {
@@ -104,9 +130,10 @@ export default function VerifyInvoicePage() {
       </p>
 
       <p className="mt-4 max-w-3xl border-l-4 border-gold bg-surface px-4 py-3">
-        Demonstration data. The sample invoices and their results are synthetic. A file you upload is
-        previewed in your browser only. It is not sent anywhere and it is not verified, because the
-        verification engine is not connected yet.
+        Demonstration data. The sample invoices are synthetic. Their checks are run by the real
+        verification engine on the local server. A file you upload is previewed in your browser
+        only. It is not sent anywhere and it is not verified, because uploaded files are not read
+        yet.
       </p>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
@@ -160,9 +187,12 @@ export default function VerifyInvoicePage() {
               id="sample"
               value={sampleId}
               onChange={(e) => chooseSample(e.target.value)}
+              disabled={samplesState !== 'ready'}
               className={fieldClass}
             >
-              <option value="">No sample selected</option>
+              <option value="">
+                {samplesState === 'loading' ? 'Loading samples...' : 'No sample selected'}
+              </option>
               {samples.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.label}
@@ -170,9 +200,24 @@ export default function VerifyInvoicePage() {
               ))}
             </select>
           </div>
+          {samplesState === 'error' && (
+            <div role="alert" className="mt-2 border-l-4 border-terracotta bg-surface px-4 py-3">
+              <p>
+                The verification service could not be reached, so the sample invoices could not be
+                loaded. Start the backend on port 8000 and try again.
+              </p>
+              <button
+                type="button"
+                onClick={() => setSamplesAttempt((n) => n + 1)}
+                className={`${fieldClass} mt-2 hover:bg-canvas`}
+              >
+                Try again
+              </button>
+            </div>
+          )}
 
           <div className="mt-4">
-            {sample && <InvoicePreview invoice={sample} />}
+            {sample && <InvoicePreview sample={sample} />}
             {upload && (
               <div className="border border-line bg-surface p-4">
                 <p className="font-semibold">{upload.name}</p>
@@ -220,17 +265,34 @@ export default function VerifyInvoicePage() {
                 <CheckList checks={uploadChecks} />
               </div>
               <p className="mt-4">
-                Verification of uploaded files arrives with the backend. Choose a sample invoice to
-                see how results are shown.
+                Verification of uploaded files arrives once the engine can read documents. Choose a
+                sample invoice to see how results are shown.
               </p>
             </>
           )}
 
-          {sample && (
+          {sample && result.state === 'loading' && <p className="mt-3">Running the checks...</p>}
+
+          {sample && result.state === 'error' && (
+            <div role="alert" className="mt-3 border-l-4 border-terracotta bg-surface px-4 py-3">
+              <p>
+                The checks could not be run because the verification service could not be reached.
+              </p>
+              <button
+                type="button"
+                onClick={() => setResultAttempt((n) => n + 1)}
+                className={`${fieldClass} mt-2 hover:bg-canvas`}
+              >
+                Try again
+              </button>
+            </div>
+          )}
+
+          {sample && result.state === 'ready' && (
             <>
-              <p className="mt-1 text-base text-ink/70">{summarize(sample.checks)}</p>
+              <p className="mt-1 text-base text-ink/70">{summarize(result.report.checks)}</p>
               <div className="mt-3">
-                <CheckList checks={sample.checks} />
+                <CheckList checks={result.report.checks} />
               </div>
 
               <h3 className="mt-6 text-lg font-semibold">Fields: invoice and signed payload</h3>
@@ -245,17 +307,15 @@ export default function VerifyInvoicePage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {FIELD_KEYS.map((key) => (
-                      <tr key={key} className="border-t border-line">
+                    {result.report.field_comparisons.map((f) => (
+                      <tr key={f.field} className="border-t border-line">
                         <th scope="row" className="px-3 py-2 font-semibold">
-                          {fieldLabels[key]}
+                          {f.label}
                         </th>
-                        <td className="px-3 py-2">{sample.visible[key]}</td>
+                        <td className="px-3 py-2">{f.visible ?? 'Not found'}</td>
+                        <td className="px-3 py-2">{f.signed ?? 'Not available'}</td>
                         <td className="px-3 py-2">
-                          {sample.signed ? sample.signed[key] : 'Not available'}
-                        </td>
-                        <td className="px-3 py-2">
-                          <StatusLabel status={fieldStatus(sample, key)} />
+                          <StatusLabel status={f.status} />
                         </td>
                       </tr>
                     ))}
@@ -265,7 +325,7 @@ export default function VerifyInvoicePage() {
 
               <h3 className="mt-6 text-lg font-semibold">Suggested next actions</h3>
               <ul className="mt-2 list-disc pl-5">
-                {sample.nextActions.map((a) => (
+                {result.report.next_actions.map((a) => (
                   <li key={a}>{a}</li>
                 ))}
               </ul>
