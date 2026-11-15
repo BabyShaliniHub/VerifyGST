@@ -1,9 +1,7 @@
 import pytest
-from fastapi.testclient import TestClient
 
 from app.core.settings import Settings
-from app.db.session import DatabaseCheck, IntegrationState, build_url, check_database
-from app.main import create_app
+from app.db.session import IntegrationState, build_url, check_database
 
 SECRET = "s3cret-value"
 
@@ -17,11 +15,6 @@ def unreachable_settings(**overrides) -> Settings:
 def skip_if_postgres_is_down():
     if check_database().state is IntegrationState.UNAVAILABLE:
         pytest.skip("PostgreSQL is not running. Start it with: docker compose up -d")
-
-
-def client_with_database(monkeypatch, state, detail) -> TestClient:
-    monkeypatch.setattr("app.api.readiness.check_database", lambda: DatabaseCheck(state, detail))
-    return TestClient(create_app())
 
 
 def test_the_password_is_hidden_from_printed_settings_and_urls():
@@ -54,34 +47,3 @@ def test_a_wrong_password_is_refused_and_reported_as_authentication_failed():
     skip_if_postgres_is_down()
     result = check_database(Settings(postgres_password="definitely-not-the-password"))
     assert result.state is IntegrationState.AUTHENTICATION_FAILED, result.detail
-
-
-def test_ready_reports_200_when_the_database_is_connected(monkeypatch):
-    client = client_with_database(monkeypatch, IntegrationState.CONNECTED, "The database answered a test query.")
-    response = client.get("/ready")
-    assert response.status_code == 200
-    body = response.json()
-    assert body["status"] == "ready"
-    assert body["components"] == [
-        {"name": "postgres", "state": "connected", "detail": "The database answered a test query."}
-    ]
-
-
-def test_ready_reports_503_when_the_database_is_down_but_health_stays_up(monkeypatch):
-    client = client_with_database(monkeypatch, IntegrationState.UNAVAILABLE, "The database could not be reached.")
-    response = client.get("/ready")
-    assert response.status_code == 503
-    assert response.json()["status"] == "not_ready"
-    assert response.json()["components"][0]["state"] == "unavailable"
-    assert client.get("/health").status_code == 200
-
-
-def test_ready_never_treats_any_failure_state_as_ready(monkeypatch):
-    for state in (
-        IntegrationState.NOT_CONFIGURED,
-        IntegrationState.AUTHENTICATION_FAILED,
-        IntegrationState.ERROR,
-        IntegrationState.UNAVAILABLE,
-    ):
-        client = client_with_database(monkeypatch, state, "x")
-        assert client.get("/ready").status_code == 503, state

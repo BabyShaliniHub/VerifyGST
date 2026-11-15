@@ -1,7 +1,7 @@
 """Application settings, read from environment variables and the repository's .env file.
 
-Real environment variables win over the .env file. The database password is held as a
-secret value, so it is never printed or logged by accident.
+Real environment variables win over the .env file. Passwords are held as secret values, so
+they are never printed or logged by accident.
 """
 
 from functools import lru_cache
@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     postgres_db: str = "verifigst"
     postgres_user: str = "verifigst"
     postgres_password: SecretStr = SecretStr("")
+
+    neo4j_uri: str = "bolt://127.0.0.1:7687"
+    neo4j_user: str = "neo4j"
+    neo4j_password: SecretStr = SecretStr("")
 
 
 @lru_cache
