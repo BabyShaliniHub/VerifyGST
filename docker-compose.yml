@@ -17,7 +17,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 12
-    restart: "no"
+    restart: unless-stopped
 
   neo4j:
     image: neo4j:5-community
@@ -38,7 +38,7 @@ services:
       timeout: 5s
       retries: 12
       start_period: 40s
-    restart: "no"
+    restart: unless-stopped
 
 volumes:
   postgres_data:
