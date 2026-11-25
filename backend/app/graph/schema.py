@@ -4,7 +4,7 @@ PostgreSQL is the authoritative store. The graph is a derived copy used for path
 analysis, rebuilt from PostgreSQL records. Every node and relationship carries the PostgreSQL
 id in its `id` property, so the two stores can always be matched.
 
-    (:Company {id, name})-[:SOLD_TO {id, invoice_reference, amount, currency,
+    (:Company {id, name})-[:SOLD_TO {id, invoice_reference, amount_minor, currency,
                                       occurred_on, evidence_level}]->(:Company)
 
 Neo4j Community enforces uniqueness. Existence constraints are an Enterprise feature, so

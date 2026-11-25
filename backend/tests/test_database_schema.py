@@ -170,7 +170,7 @@ def test_the_orm_models_can_write_and_read_rows(connection):
 
 
 def test_a_valid_company_is_stored_with_defaults(connection):
-    company_id = add_company(connection, domain="grove-chemicals.example")
+    company_id = add_company(connection, domain="schema-test-company.example")
     row = connection.execute(
         text("SELECT is_synthetic, created_at IS NOT NULL AS stamped FROM companies WHERE id = :id"),
         {"id": company_id},
