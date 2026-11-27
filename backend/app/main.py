@@ -1,6 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.errors import register_error_handlers
+from app.api.findings import router as findings_router
+from app.api.graph import router as graph_router
 from app.api.health import router as health_router
 from app.api.readiness import router as readiness_router
 from app.api.verifications import router as verification_router
@@ -19,9 +22,12 @@ def create_app() -> FastAPI:
         allow_credentials=False,
     )
     application.state.demo = build_demo_environment()
+    register_error_handlers(application)
     application.include_router(health_router)
     application.include_router(readiness_router)
     application.include_router(verification_router)
+    application.include_router(graph_router)
+    application.include_router(findings_router)
     return application
 
 

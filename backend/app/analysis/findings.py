@@ -238,3 +238,35 @@ def build_finding(
         not_evaluated=not_evaluated,
         disclaimer=DISCLAIMER,
     )
+
+
+@dataclass(frozen=True)
+class CheckResult:
+    code: str
+    title: str
+    result: str  # triggered, not_triggered or not_evaluated
+
+
+# Every check that runs on a cycle, in display order. The titles must match the signal titles.
+CHECKS = (
+    ("evidence_gaps", "Evidence is missing or incomplete"),
+    ("repeated_invoice_reference", "The same invoice reference is used more than once"),
+    ("similar_amounts", "The amounts barely change around the loop"),
+    ("tight_timing", "The whole loop closes within days"),
+)
+
+
+def check_results(finding: Finding) -> tuple[CheckResult, ...]:
+    """Every check that ran, so a quiet finding reads as 'checked, nothing triggered', never as 'cleared'."""
+    triggered = {signal.code for signal in finding.signals}
+    skipped = {item.code for item in finding.not_evaluated}
+    results = []
+    for code, title in CHECKS:
+        if code in triggered:
+            state = "triggered"
+        elif code in skipped:
+            state = "not_evaluated"
+        else:
+            state = "not_triggered"
+        results.append(CheckResult(code, title, state))
+    return tuple(results)
