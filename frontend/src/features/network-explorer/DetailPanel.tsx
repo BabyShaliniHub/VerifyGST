@@ -1,26 +1,18 @@
-import type { ReactNode } from 'react'
-import { formatDate, formatInr } from '../../lib/format'
+import { useMemo, type ReactNode } from 'react'
+import { formatDate } from '../../lib/format'
+import type { Analysis, ApiCompany, ApiFinding, ApiTransaction } from './explorerApi'
 import {
-  companies,
+  checkStateLabels,
   evidenceLabels,
-  findings,
+  findingKey,
+  formatAmount,
+  priorityLabels,
   statusLabels,
-  transactions,
-  type DemoFinding,
-  type DemoTransaction,
-} from './demoGraph'
+  type NodeStatus,
+} from './explorerModel'
 import type { Selection } from './NetworkGraph'
 
-const nameOf = (id: string) => companies.find((c) => c.id === id)?.name ?? id
-
-function pathText(f: DemoFinding): string {
-  const txs = f.transactionIds.flatMap((id) => {
-    const t = transactions.find((x) => x.id === id)
-    return t ? [t] : []
-  })
-  if (txs.length === 0) return ''
-  return [txs[0].source, ...txs.map((t) => t.target)].map(nameOf).join(' -> ')
-}
+type NameOf = (id: string) => string
 
 function LinkButton({ onClick, children }: { onClick: () => void; children: ReactNode }) {
   return (
@@ -33,10 +25,12 @@ function LinkButton({ onClick, children }: { onClick: () => void; children: Reac
 function TransactionList({
   items,
   direction,
+  nameOf,
   onSelect,
 }: {
-  items: DemoTransaction[]
+  items: ApiTransaction[]
   direction: 'in' | 'out'
+  nameOf: NameOf
   onSelect: (s: Selection) => void
 }) {
   if (items.length === 0) return <p className="mt-1">None in this dataset.</p>
@@ -49,10 +43,12 @@ function TransactionList({
             onClick={() => onSelect({ kind: 'edge', id: t.id })}
             className="w-full px-3 py-2 text-left hover:bg-canvas"
           >
-            <span className="font-semibold">{t.invoiceRef}</span> - {formatInr(t.amountInr)}
+            <span className="font-semibold">{t.invoice_reference ?? 'No invoice reference'}</span>
+            {' - '}
+            {formatAmount(t.amount, t.currency)}
             <span className="block text-base text-ink/70">
               {direction === 'in' ? 'from ' : 'to '}
-              {nameOf(direction === 'in' ? t.source : t.target)}
+              {nameOf(direction === 'in' ? t.seller_id : t.buyer_id)}
             </span>
           </button>
         </li>
@@ -61,59 +57,82 @@ function TransactionList({
   )
 }
 
-function CompanyDetails({ id, onSelect }: { id: string; onSelect: (s: Selection) => void }) {
-  const company = companies.find((c) => c.id === id)
-  if (!company) return null
-  const incoming = transactions.filter((t) => t.target === id)
-  const outgoing = transactions.filter((t) => t.source === id)
+function CompanyDetails({
+  company,
+  transactions,
+  status,
+  nameOf,
+  onSelect,
+}: {
+  company: ApiCompany
+  transactions: ApiTransaction[]
+  status: NodeStatus
+  nameOf: NameOf
+  onSelect: (s: Selection) => void
+}) {
+  const incoming = transactions.filter((t) => t.buyer_id === company.id)
+  const outgoing = transactions.filter((t) => t.seller_id === company.id)
   return (
     <div>
       <h2 className="text-xl font-semibold">{company.name}</h2>
-      <p className="text-base text-ink/70">{company.demoRef} - demonstration company</p>
+      <p className="text-base text-ink/70">
+        {company.domain ?? 'No domain recorded'}
+        {company.is_synthetic ? ' - synthetic demonstration company' : ''}
+      </p>
       <p className="mt-3">
-        <span className="font-semibold">Network analysis:</span> {statusLabels[company.status]}
+        <span className="font-semibold">Loop analysis:</span> {statusLabels[status]}
       </p>
       <h3 className="mt-4 font-semibold">Incoming transactions ({incoming.length})</h3>
-      <TransactionList items={incoming} direction="in" onSelect={onSelect} />
+      <TransactionList items={incoming} direction="in" nameOf={nameOf} onSelect={onSelect} />
       <h3 className="mt-4 font-semibold">Outgoing transactions ({outgoing.length})</h3>
-      <TransactionList items={outgoing} direction="out" onSelect={onSelect} />
+      <TransactionList items={outgoing} direction="out" nameOf={nameOf} onSelect={onSelect} />
     </div>
   )
 }
 
-function TransactionDetails({ id, onSelect }: { id: string; onSelect: (s: Selection) => void }) {
-  const t = transactions.find((x) => x.id === id)
-  if (!t) return null
-  const sameRef = transactions.filter((o) => o.id !== t.id && o.invoiceRef === t.invoiceRef)
+function TransactionDetails({
+  transaction: t,
+  transactions,
+  nameOf,
+  onSelect,
+}: {
+  transaction: ApiTransaction
+  transactions: ApiTransaction[]
+  nameOf: NameOf
+  onSelect: (s: Selection) => void
+}) {
+  const sameRef = t.invoice_reference
+    ? transactions.filter((o) => o.id !== t.id && o.invoice_reference === t.invoice_reference)
+    : []
   return (
     <div>
-      <h2 className="text-xl font-semibold">Transaction {t.id}</h2>
+      <h2 className="text-xl font-semibold">Transaction</h2>
       <dl className="mt-3 grid grid-cols-[8rem_1fr] gap-x-3 gap-y-2">
         <dt className="font-semibold">From</dt>
         <dd>
-          <LinkButton onClick={() => onSelect({ kind: 'node', id: t.source })}>
-            {nameOf(t.source)}
+          <LinkButton onClick={() => onSelect({ kind: 'node', id: t.seller_id })}>
+            {nameOf(t.seller_id)}
           </LinkButton>
         </dd>
         <dt className="font-semibold">To</dt>
         <dd>
-          <LinkButton onClick={() => onSelect({ kind: 'node', id: t.target })}>
-            {nameOf(t.target)}
+          <LinkButton onClick={() => onSelect({ kind: 'node', id: t.buyer_id })}>
+            {nameOf(t.buyer_id)}
           </LinkButton>
         </dd>
         <dt className="font-semibold">Invoice</dt>
-        <dd>{t.invoiceRef}</dd>
+        <dd>{t.invoice_reference ?? 'No invoice reference'}</dd>
         <dt className="font-semibold">Amount</dt>
-        <dd>{formatInr(t.amountInr)}</dd>
+        <dd>{formatAmount(t.amount, t.currency)}</dd>
         <dt className="font-semibold">Date</dt>
-        <dd>{formatDate(t.date)}</dd>
+        <dd>{formatDate(t.occurred_on)}</dd>
         <dt className="font-semibold">Evidence</dt>
-        <dd>{evidenceLabels[t.evidence]}</dd>
+        <dd>{evidenceLabels[t.evidence_level]}</dd>
       </dl>
       {sameRef.length > 0 && (
         <p className="mt-3">
-          The reference {t.invoiceRef} also appears on {sameRef.length} other transaction
-          {sameRef.length > 1 ? 's' : ''} ({sameRef.map((o) => o.id).join(', ')}).
+          The reference {t.invoice_reference} also appears on {sameRef.length} other transaction
+          {sameRef.length > 1 ? 's' : ''}.
         </p>
       )}
       {t.note && <p className="mt-3">{t.note}</p>}
@@ -126,42 +145,69 @@ function FindingCard({
   active,
   onToggle,
 }: {
-  finding: DemoFinding
+  finding: ApiFinding
   active: boolean
   onToggle: () => void
 }) {
+  const total = finding.checks.length
+  const notEvaluated = finding.checks.filter((c) => c.result === 'not_evaluated').length
   return (
     <article className="border-t border-line pt-4">
-      <h3 className="font-semibold">{finding.title}</h3>
-      <p className="text-base text-ink/70">{finding.level}</p>
-      <dl className="mt-2 flex flex-col gap-2">
-        <div>
-          <dt className="font-semibold">Rule</dt>
-          <dd>{finding.rule}</dd>
-        </div>
-        <div>
-          <dt className="font-semibold">Path</dt>
-          <dd>{pathText(finding)}</dd>
-        </div>
-        <div>
-          <dt className="font-semibold">Supporting data</dt>
-          <dd>
-            <ul className="list-disc pl-5">
-              {finding.supportingData.map((s) => (
-                <li key={s}>{s}</li>
-              ))}
-            </ul>
-          </dd>
-        </div>
-        <div>
-          <dt className="font-semibold">Limitations</dt>
-          <dd>{finding.limitations}</dd>
-        </div>
-        <div>
-          <dt className="font-semibold">Suggested next step</dt>
-          <dd>{finding.nextStep}</dd>
-        </div>
-      </dl>
+      <h3 className="font-semibold">{finding.summary}</h3>
+      <p className="mt-1">
+        <span className="font-semibold">Review priority:</span>{' '}
+        {priorityLabels[finding.priority]}
+      </p>
+      <p className="text-base text-ink/70">{finding.priority_explanation}</p>
+
+      {finding.signals.length === 0 ? (
+        <p className="mt-3">
+          No additional signals were found. {total - notEvaluated} of {total} checks ran and none
+          triggered
+          {notEvaluated > 0 ? `; ${notEvaluated} could not be evaluated` : ''}. A quiet loop is
+          not cleared: the loop itself is still a pattern worth knowing about.
+        </p>
+      ) : (
+        <ul className="mt-3 flex flex-col gap-3">
+          {finding.signals.map((signal) => (
+            <li key={signal.code} className="border-l-4 border-gold bg-canvas px-3 py-2">
+              <p className="font-semibold">{signal.title}</p>
+              <dl className="mt-1 flex flex-col gap-1">
+                <div>
+                  <dt className="inline font-semibold">What we saw: </dt>
+                  <dd className="inline">{signal.observed}</dd>
+                </div>
+                <div>
+                  <dt className="inline font-semibold">Why it may matter: </dt>
+                  <dd className="inline">{signal.may_indicate}</dd>
+                </div>
+                <div>
+                  <dt className="inline font-semibold">What it does not prove: </dt>
+                  <dd className="inline">{signal.does_not_prove}</dd>
+                </div>
+              </dl>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <details className="mt-3">
+        <summary className="cursor-pointer font-semibold">Checks run on this loop</summary>
+        <ul className="mt-2 list-disc pl-5">
+          {finding.checks.map((check) => (
+            <li key={check.code}>
+              {check.title}: {checkStateLabels[check.result]}
+            </li>
+          ))}
+        </ul>
+        {finding.not_evaluated.map((item) => (
+          <p key={item.code} className="mt-2">
+            {item.reason}
+          </p>
+        ))}
+      </details>
+
+      <p className="mt-3 text-base text-ink/70">{finding.disclaimer}</p>
       <button
         type="button"
         onClick={onToggle}
@@ -176,14 +222,96 @@ function FindingCard({
   )
 }
 
-type Props = {
-  selection: Selection
-  highlightedId: string | null
-  onSelect: (s: Selection) => void
-  onHighlight: (id: string | null) => void
+function FindingsSection({
+  analysis,
+  highlightedKey,
+  onHighlight,
+  onRetry,
+}: {
+  analysis: Analysis
+  highlightedKey: string | null
+  onHighlight: (key: string | null) => void
+  onRetry: () => void
+}) {
+  if (analysis.status === 'unavailable') {
+    return (
+      <div role="alert" className="mt-3 border-l-4 border-gold bg-canvas px-3 py-2">
+        <p>Loop analysis is not available right now. {analysis.message}</p>
+        <button
+          type="button"
+          onClick={onRetry}
+          className="mt-2 rounded-md border border-line bg-surface px-3 py-2 hover:bg-canvas"
+        >
+          Try again
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <p className="mt-1 text-base text-ink/70">
+        Searched for loops of {analysis.minLength} to {analysis.maxLength} companies. Other
+        patterns are not checked here.
+      </p>
+      {analysis.truncated && (
+        <p className="mt-2 border-l-4 border-gold bg-canvas px-3 py-2">
+          The search stopped at its limit, so this list is incomplete.
+        </p>
+      )}
+      {analysis.findings.length === 0 && (
+        <p className="mt-3">
+          No trading loops of {analysis.minLength} to {analysis.maxLength} companies were found in
+          this data.
+        </p>
+      )}
+      <div className="mt-3 flex flex-col gap-4">
+        {analysis.findings.map((finding) => {
+          const key = findingKey(finding)
+          return (
+            <FindingCard
+              key={key}
+              finding={finding}
+              active={highlightedKey === key}
+              onToggle={() => onHighlight(highlightedKey === key ? null : key)}
+            />
+          )
+        })}
+      </div>
+    </>
+  )
 }
 
-export default function DetailPanel({ selection, highlightedId, onSelect, onHighlight }: Props) {
+type Props = {
+  companies: ApiCompany[]
+  transactions: ApiTransaction[]
+  statuses: Map<string, NodeStatus>
+  analysis: Analysis
+  selection: Selection
+  highlightedKey: string | null
+  onSelect: (s: Selection) => void
+  onHighlight: (key: string | null) => void
+  onRetry: () => void
+}
+
+export default function DetailPanel({
+  companies,
+  transactions,
+  statuses,
+  analysis,
+  selection,
+  highlightedKey,
+  onSelect,
+  onHighlight,
+  onRetry,
+}: Props) {
+  const names = useMemo(() => new Map(companies.map((c) => [c.id, c.name])), [companies])
+  const nameOf: NameOf = (id) => names.get(id) ?? 'a company that is not loaded'
+
+  const company = selection?.kind === 'node' ? companies.find((c) => c.id === selection.id) : undefined
+  const transaction =
+    selection?.kind === 'edge' ? transactions.find((t) => t.id === selection.id) : undefined
+
   return (
     <aside
       aria-label="Details"
@@ -192,23 +320,34 @@ export default function DetailPanel({ selection, highlightedId, onSelect, onHigh
       {selection === null && (
         <p>Select a company or a transaction on the graph to see its details.</p>
       )}
-      {selection?.kind === 'node' && <CompanyDetails id={selection.id} onSelect={onSelect} />}
-      {selection?.kind === 'edge' && <TransactionDetails id={selection.id} onSelect={onSelect} />}
+      {company && (
+        <CompanyDetails
+          company={company}
+          transactions={transactions}
+          status={statuses.get(company.id) ?? 'unavailable'}
+          nameOf={nameOf}
+          onSelect={onSelect}
+        />
+      )}
+      {transaction && (
+        <TransactionDetails
+          transaction={transaction}
+          transactions={transactions}
+          nameOf={nameOf}
+          onSelect={onSelect}
+        />
+      )}
 
-      <h2 className="mt-8 text-xl font-semibold">Findings in this dataset</h2>
+      <h2 className="mt-8 text-xl font-semibold">Trading loops</h2>
       <p className="mt-1 text-base text-ink/70">
         Rule-based indicators for investigation. They are not proof of wrongdoing.
       </p>
-      <div className="mt-3 flex flex-col gap-4">
-        {findings.map((f) => (
-          <FindingCard
-            key={f.id}
-            finding={f}
-            active={highlightedId === f.id}
-            onToggle={() => onHighlight(highlightedId === f.id ? null : f.id)}
-          />
-        ))}
-      </div>
+      <FindingsSection
+        analysis={analysis}
+        highlightedKey={highlightedKey}
+        onHighlight={onHighlight}
+        onRetry={onRetry}
+      />
     </aside>
   )
 }

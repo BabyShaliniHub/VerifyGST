@@ -1,6 +1,6 @@
 import type { CheckResult, CheckStatus } from '../features/invoice-verification/checkTypes'
 
-const BASE_URL: string = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'
+export const BASE_URL: string = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'
 
 export type ApiFieldComparison = {
   field: string

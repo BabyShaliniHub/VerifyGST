@@ -1,18 +1,44 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type cytoscape from 'cytoscape'
 import { Maximize, RotateCcw, ZoomIn, ZoomOut } from 'lucide-react'
 import DetailPanel from './DetailPanel'
-import { companies, transactions } from './demoGraph'
+import {
+  loadExplorerData,
+  type Analysis,
+  type ApiFinding,
+  type ExplorerResult,
+  type GraphResponse,
+} from './explorerApi'
+import { buildLayout, companyStatuses } from './explorerModel'
 import Legend from './Legend'
-import NetworkGraph, { presetLayout, type Selection } from './NetworkGraph'
+import NetworkGraph, { type Selection } from './NetworkGraph'
 
 const buttonClass =
   'inline-flex items-center gap-2 rounded-md border border-line bg-surface px-3 py-2 hover:bg-canvas'
 
-export default function NetworkExplorerPage() {
+const NO_FINDINGS: ApiFinding[] = []
+
+type PageState = { status: 'loading' } | ExplorerResult
+
+function Explorer({
+  graph,
+  analysis,
+  onRetry,
+}: {
+  graph: GraphResponse
+  analysis: Analysis
+  onRetry: () => void
+}) {
   const cyRef = useRef<cytoscape.Core | null>(null)
   const [selection, setSelection] = useState<Selection>(null)
-  const [highlightedId, setHighlightedId] = useState<string | null>(null)
+  const [highlightedKey, setHighlightedKey] = useState<string | null>(null)
+
+  const statuses = useMemo(() => companyStatuses(graph.companies, analysis), [graph, analysis])
+  const layout = useMemo(
+    () => buildLayout(graph.companies, graph.transactions),
+    [graph.companies, graph.transactions],
+  )
+  const findings = analysis.status === 'ready' ? analysis.findings : NO_FINDINGS
 
   const handleReady = useCallback((cy: cytoscape.Core | null) => {
     cyRef.current = cy
@@ -32,22 +58,37 @@ export default function NetworkExplorerPage() {
   }
 
   const resetLayout = () => {
-    cyRef.current?.layout(presetLayout).run()
+    cyRef.current?.layout(layout).run()
   }
 
   return (
-    <section>
-      <h1 className="text-2xl font-semibold">Network Explorer</h1>
-      <p className="mt-2 max-w-3xl">
-        Directed graph of companies and the transactions between them. Network patterns are
-        indicators for investigation, not proof of wrongdoing.
-      </p>
+    <>
+      {graph.contains_synthetic_data && (
+        <p className="mt-4 max-w-3xl border-l-4 border-gold bg-surface px-4 py-3">
+          Synthetic demonstration data. The companies, invoices and transactions shown here are
+          invented and loaded from the VerifiGST backend. They describe no real business and no
+          real GST data.
+        </p>
+      )}
 
-      <p className="mt-4 max-w-3xl border-l-4 border-gold bg-surface px-4 py-3">
-        Demonstration data. The companies, invoices and transactions shown here are synthetic.
-        They describe no real business, and the graph is not connected to a backend or to real
-        GST data.
-      </p>
+      {(graph.truncated.companies || graph.truncated.transactions) && (
+        <p className="mt-4 max-w-3xl border-l-4 border-gold bg-surface px-4 py-3">
+          More records exist than this view loads, so the graph below is incomplete.
+        </p>
+      )}
+
+      {analysis.status === 'unavailable' && (
+        <div role="alert" className="mt-4 max-w-3xl border-l-4 border-gold bg-surface px-4 py-3">
+          <p>
+            Loop analysis is not available right now. {analysis.message} The graph below shows
+            companies and transactions only. Companies with a dashed grey outline have not been
+            checked for trading loops.
+          </p>
+          <button type="button" onClick={onRetry} className={`${buttonClass} mt-2`}>
+            Try again
+          </button>
+        </div>
+      )}
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <button type="button" onClick={fit} className={buttonClass}>
@@ -67,7 +108,7 @@ export default function NetworkExplorerPage() {
           Zoom out
         </button>
         <span className="text-base text-ink/70">
-          {companies.length} companies, {transactions.length} transactions
+          {graph.companies.length} companies, {graph.transactions.length} transactions
         </span>
       </div>
 
@@ -75,8 +116,13 @@ export default function NetworkExplorerPage() {
         <div>
           <div className="h-[70vh] min-h-[480px] border border-line bg-surface">
             <NetworkGraph
+              companies={graph.companies}
+              transactions={graph.transactions}
+              statuses={statuses}
+              findings={findings}
+              layout={layout}
               selection={selection}
-              highlightedFindingId={highlightedId}
+              highlightedKey={highlightedKey}
               onSelect={setSelection}
               onReady={handleReady}
             />
@@ -84,12 +130,64 @@ export default function NetworkExplorerPage() {
           <Legend />
         </div>
         <DetailPanel
+          companies={graph.companies}
+          transactions={graph.transactions}
+          statuses={statuses}
+          analysis={analysis}
           selection={selection}
-          highlightedId={highlightedId}
+          highlightedKey={highlightedKey}
           onSelect={setSelection}
-          onHighlight={setHighlightedId}
+          onHighlight={setHighlightedKey}
+          onRetry={onRetry}
         />
       </div>
+    </>
+  )
+}
+
+export default function NetworkExplorerPage() {
+  const [state, setState] = useState<PageState>({ status: 'loading' })
+  const [attempt, setAttempt] = useState(0)
+
+  useEffect(() => {
+    const controller = new AbortController()
+    void loadExplorerData(controller.signal).then((result) => {
+      if (!controller.signal.aborted) setState(result)
+    })
+    return () => controller.abort()
+  }, [attempt])
+
+  const retry = () => {
+    setState({ status: 'loading' })
+    setAttempt((n) => n + 1)
+  }
+
+  return (
+    <section>
+      <h1 className="text-2xl font-semibold">Network Explorer</h1>
+      <p className="mt-2 max-w-3xl">
+        Directed graph of companies and the transactions between them. Network patterns are
+        indicators for investigation, not proof of wrongdoing.
+      </p>
+
+      {state.status === 'loading' && (
+        <p role="status" className="mt-4">
+          Loading the network...
+        </p>
+      )}
+
+      {state.status === 'error' && (
+        <div role="alert" className="mt-4 max-w-3xl border-l-4 border-gold bg-surface px-4 py-3">
+          <p>The network could not be loaded. {state.message}</p>
+          <button type="button" onClick={retry} className={`${buttonClass} mt-2`}>
+            Try again
+          </button>
+        </div>
+      )}
+
+      {state.status === 'ready' && (
+        <Explorer graph={state.graph} analysis={state.analysis} onRetry={retry} />
+      )}
     </section>
   )
 }

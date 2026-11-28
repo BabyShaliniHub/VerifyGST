@@ -36,14 +36,14 @@ export default function Legend() {
   return (
     <div className="mt-4 grid gap-6 border border-line bg-surface p-4 sm:grid-cols-2">
       <div>
-        <h2 className="text-lg font-semibold">Companies (network analysis)</h2>
+        <h2 className="text-lg font-semibold">Companies (loop analysis)</h2>
         <ul className="mt-2 flex flex-col gap-1">
-          <Item label="No configured rule triggered">
+          <Item label="Not in a loop found by this search">
             <NodeShape>
               <circle cx="14" cy="14" r="9" fill="#FFFFFF" stroke="#356859" strokeWidth="3" />
             </NodeShape>
           </Item>
-          <Item label="Suspicious pattern detected">
+          <Item label="In a trading loop">
             <NodeShape>
               <polygon
                 points="14,3 24,8.5 24,19.5 14,25 4,19.5 4,8.5"
@@ -53,7 +53,7 @@ export default function Legend() {
               />
             </NodeShape>
           </Item>
-          <Item label="High-priority pattern detected">
+          <Item label="In a loop with several signals (high review priority)">
             <NodeShape>
               <polygon
                 points="14,3 25,14 14,25 3,14"
@@ -63,7 +63,7 @@ export default function Legend() {
               />
             </NodeShape>
           </Item>
-          <Item label="Insufficient data">
+          <Item label="Loop analysis not available">
             <NodeShape>
               <rect
                 x="4"

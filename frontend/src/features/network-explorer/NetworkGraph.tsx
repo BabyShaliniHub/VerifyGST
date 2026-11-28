@@ -1,26 +1,30 @@
 import { useEffect, useRef } from 'react'
 import cytoscape from 'cytoscape'
-import { companies, findings, transactions } from './demoGraph'
+import type { ApiCompany, ApiFinding, ApiTransaction } from './explorerApi'
+import { findingKey, type NodeStatus } from './explorerModel'
 
 export type Selection = { kind: 'node' | 'edge'; id: string } | null
 
-export const presetLayout = {
-  name: 'preset' as const,
-  positions: Object.fromEntries(companies.map((c) => [c.id, { x: c.x, y: c.y }])),
-  fit: true,
-  padding: 60,
-}
-
 type Props = {
+  companies: ApiCompany[]
+  transactions: ApiTransaction[]
+  statuses: Map<string, NodeStatus>
+  findings: ApiFinding[]
+  layout: cytoscape.LayoutOptions
   selection: Selection
-  highlightedFindingId: string | null
+  highlightedKey: string | null
   onSelect: (selection: Selection) => void
   onReady: (cy: cytoscape.Core | null) => void
 }
 
 export default function NetworkGraph({
+  companies,
+  transactions,
+  statuses,
+  findings,
+  layout,
   selection,
-  highlightedFindingId,
+  highlightedKey,
   onSelect,
   onReady,
 }: Props) {
@@ -35,23 +39,29 @@ export default function NetworkGraph({
   useEffect(() => {
     if (!containerRef.current) return
 
+    // When the graph limit cut companies off, some transactions point at companies that are not
+    // loaded. They are skipped here, because a graph edge needs both of its ends.
+    const known = new Set(companies.map((c) => c.id))
+
     const cy = cytoscape({
       container: containerRef.current,
       elements: [
         ...companies.map((c) => ({
-          data: { id: c.id, name: c.name, status: c.status },
+          data: { id: c.id, name: c.name, status: statuses.get(c.id) ?? 'unavailable' },
         })),
-        ...transactions.map((t) => ({
-          data: {
-            id: t.id,
-            source: t.source,
-            target: t.target,
-            evidence: t.evidence,
-            label: t.invoiceRef,
-          },
-        })),
+        ...transactions
+          .filter((t) => known.has(t.seller_id) && known.has(t.buyer_id))
+          .map((t) => ({
+            data: {
+              id: t.id,
+              source: t.seller_id,
+              target: t.buyer_id,
+              evidence: t.evidence_level,
+              label: t.invoice_reference ?? '',
+            },
+          })),
       ],
-      layout: presetLayout,
+      layout,
       minZoom: 0.3,
       maxZoom: 2.5,
       style: [
@@ -74,7 +84,7 @@ export default function NetworkGraph({
           },
         },
         {
-          selector: 'node[status = "suspicious"]',
+          selector: 'node[status = "loop"]',
           style: { shape: 'hexagon', 'border-color': '#B58A45' },
         },
         {
@@ -82,7 +92,7 @@ export default function NetworkGraph({
           style: { shape: 'diamond', 'border-color': '#A84F43', width: 62, height: 62 },
         },
         {
-          selector: 'node[status = "insufficient"]',
+          selector: 'node[status = "unavailable"]',
           style: {
             shape: 'round-rectangle',
             'border-color': '#8A8C84',
@@ -158,31 +168,33 @@ export default function NetworkGraph({
       cy.destroy()
       cyRef.current = null
     }
-  }, [])
+  }, [companies, transactions, statuses, layout, onReady])
 
   useEffect(() => {
     const cy = cyRef.current
     if (!cy) return
     cy.elements().removeClass('dim hl-high hl-susp')
-    if (!highlightedFindingId) return
-    const finding = findings.find((f) => f.id === highlightedFindingId)
+    if (!highlightedKey) return
+    const finding = findings.find((f) => findingKey(f) === highlightedKey)
     if (!finding) return
-    const cls = finding.level === 'High-priority pattern detected' ? 'hl-high' : 'hl-susp'
+    const cls = finding.priority === 'high' ? 'hl-high' : 'hl-susp'
     const members = cy
       .elements()
       .filter(
-        (el) => finding.transactionIds.includes(el.id()) || finding.companyIds.includes(el.id()),
+        (el) =>
+          finding.transaction_ids.includes(el.id()) ||
+          finding.companies.some((company) => company.id === el.id()),
       )
     cy.elements().not(members).addClass('dim')
     members.addClass(cls)
-  }, [highlightedFindingId])
+  }, [companies, transactions, statuses, layout, findings, highlightedKey])
 
   useEffect(() => {
     const cy = cyRef.current
     if (!cy) return
     cy.elements().unselect()
     if (selection) cy.getElementById(selection.id).select()
-  }, [selection])
+  }, [companies, transactions, statuses, layout, selection])
 
   return <div ref={containerRef} className="h-full w-full" />
 }
